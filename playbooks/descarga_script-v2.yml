@@ -1,0 +1,43 @@
+---
+- name: Playbook para gestionar script diffconfigs
+  hosts: nmis
+  become: yes
+  vars:
+    dest_path: "/usr/local/nmis9/lib/NMISNG/Node.pm"
+    dest_dir: "/usr/local/nmis9/lib/NMISNG/"
+    file_name: "Node.pm"
+    backup_path: "/data/ansible-backup/"
+    # Esto genera la fecha 26-01-28_0000 (Año-mes-dia_horasminutos)
+    fecha_custom: "{{ ansible_facts.date_time.year[2:] }}{{ ansible_facts.date_time.month }}{{ ansible_facts.date_time.day }}"
+    hora_custom: "{{ '%02d' | format(ansible_facts.date_time.hour|int) }}{{ '%02d' | format(ansible_facts.date_time.minute|int) }}"
+    url_raw: "https://raw.githubusercontent.com/Opmantek/nmis9/refs/heads/nmis9_dev/lib/NMISNG/Node.pm"
+
+  tasks:
+    - name: Verificar si el archivo ya existe
+      ansible.builtin.stat:
+        path: "{{ dest_path }}"
+      register: archivo_stat
+
+    - name: Crear directorio de backup (solo si necesario, idempotente)
+      ansible.builtin.file:
+        path: "{{ backup_path }}"
+        state: directory
+        mode: '0755'
+      when: archivo_stat.stat.exists
+
+    - name: Respaldar archivo si ya existía
+      ansible.builtin.shell:
+        cp "{{ dest_path }}" "{{ backup_path }}{{ file_name }}-{{ fecha_custom }}_{{ hora_custom }}"
+      args:
+        executable: /bin/bash
+      when: archivo_stat.stat.exists
+
+    - name: Descargar nueva versión desde GitHub
+      ansible.builtin.get_url:
+        url: "{{ url_raw }}"
+        dest: "{{ dest_dir }}"
+        mode: '0660'
+
+    - name: Correr script fixperms
+      ansible.builtin.command: "/usr/local/nmis9/bin/nmis-cli act=fixperms"
+      when: true

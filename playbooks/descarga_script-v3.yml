@@ -1,0 +1,46 @@
+---
+- name: Playbook para gestionar script diffconfigs
+  hosts: nmis
+  vars:
+    dest_dir: "/tmp/prueba/"
+    file_name: "Node.pm"
+    backup_path: "/data/ansible-backup/"
+    # Esto genera la fecha 26-01-28_0000 (Año-mes-dia_horasminutos)
+    fecha_custom: "{{ ansible_facts.date_time.year[2:] }}{{ ansible_facts.date_time.month }}{{ ansible_facts.date_time.day }}"
+    hora_custom: "{{ '%02d' | format(ansible_facts.date_time.hour|int) }}{{ '%02d' | format(ansible_facts.date_time.minute|int) }}"
+    repo_branch: "nmis9_dev"
+    github_base: "https://raw.githubusercontent.com/Opmantek/nmis9/refs/heads/{{ repo_branch }}/lib/NMISNG/"
+  tasks:
+    - name: Verificar si el directorio NMISNG ya existe
+      ansible.builtin.stat:
+        path: "{{ dest_dir }}"
+      register: directorio_stat
+
+    - name: Respaldar directorio NMISNG completo si ya existía
+      ansible.builtin.shell: |
+        cp -r "{{ dest_dir }}" "{{ backup_path }}NMISNG-{{ fecha_custom }}_{{ hora_custom }}"
+      args:
+        executable: /bin/bash
+      when: directorio_stat.stat.exists
+
+    - name: Obtener lista de archivos en el directorio NMISNG desde GitHub
+      ansible.builtin.uri:
+        url: "https://api.github.com/repos/Opmantek/nmis9/contents/lib/NMISNG?ref={{ repo_branch }}"
+        headers:
+          Accept: "application/vnd.github.v3+json"
+      register: github_contents
+      # Nota: Esto requiere acceso a internet y puede tener rate limiting
+      
+    - name: Descargar cada archivo en formato RAW
+      ansible.builtin.get_url:
+        url: "{{ item.download_url }}"
+        dest: "{{ dest_dir }}{{ item.name }}"
+        mode: '0660'
+      loop: "{{ github_contents.json }}"
+      when: item.type == 'file'
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Correr script fixperms
+      ansible.builtin.command: "/usr/local/nmis9/bin/nmis-cli act=fixperms"
+      when: true
