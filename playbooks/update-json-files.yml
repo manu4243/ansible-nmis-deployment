@@ -1,0 +1,22 @@
+---
+- name: Playbook para actualizar valores de llaves en json files.
+  hosts: nmis
+  vars:
+    dest_dir: "/usr/local/nmis9/"
+    file_name: "json-prueba.json"
+  tasks:
+    - name: Verificar si el archivo a editar existe
+      ansible.builtin.stat:
+        path: "{{ dest_dir }}{{ file_name }}"
+      register: file_stat
+
+    - name: Actualizar llave en Json file si este existe y el valor es diferente
+      ansible.builtin.shell: |
+        jq '.apiUser = "{{ api_user }}" | .apiPass = "{{ api_pass }}"' {{ dest_dir }}{{ file_name }} > {{ dest_dir }}archivo_tmp.json && mv {{ dest_dir }}archivo_tmp.json {{ dest_dir }}{{ file_name }}
+      args:
+        executable: /bin/bash
+      when: file_stat.stat.exists
+
+    - name: Correr script fixperms
+      ansible.builtin.command: "/usr/local/nmis9/bin/nmis-cli act=fixperms"
+      when: true
